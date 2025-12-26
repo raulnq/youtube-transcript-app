@@ -5,6 +5,8 @@ import { YoutubeTranscript } from './youtube-transcript.js';
 
 type Payload = {
   videoId: string;
+  author: string;
+  link: string;
 };
 
 const awsRegion = process.env['AWS_REGION'] ?? 'us-east-1';
@@ -17,6 +19,11 @@ if (!endpointUrl) {
   throw new Error('ENDPOINT_URL environment variable is required');
 }
 
+const endpointApiKey = process.env['ENDPOINT_API_KEY'];
+if (!endpointApiKey) {
+  throw new Error('ENDPOINT_API_KEY environment variable is required');
+}
+
 console.log(`Queue: ${sqsQueueUrl}`);
 console.log(`Endpoint: ${endpointUrl}`);
 
@@ -25,6 +32,8 @@ const sqsClient = new SQSClient({ region: awsRegion });
 const consumer = Consumer.create({
   queueUrl: sqsQueueUrl,
   sqs: sqsClient,
+  batchSize: 1,
+  visibilityTimeout: 60,
   handleMessage: async message => {
     console.log(`Processing message: ${message.MessageId}`);
     try {
@@ -32,13 +41,19 @@ const consumer = Consumer.create({
       const raw = await YoutubeTranscript.fetchTranscript(payload.videoId);
       const transcript = raw.map(item => item.text).join(' ');
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
       const response = await fetch(endpointUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-Api-Key': endpointApiKey,
         },
-        body: JSON.stringify({ transcript }),
+        body: JSON.stringify({
+          transcript,
+          videoId: payload.videoId,
+          author: payload.author,
+          link: payload.link,
+        }),
         signal: controller.signal,
       });
 
