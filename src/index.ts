@@ -1,7 +1,11 @@
 import 'dotenv/config';
 import { Consumer } from 'sqs-consumer';
 import { SQSClient } from '@aws-sdk/client-sqs';
-import { YoutubeTranscript } from './youtube-transcript.js';
+import {
+  YoutubeTranscript,
+  YoutubeTranscriptDisabledError,
+  YoutubeTranscriptVideoStatusError,
+} from './youtube-transcript.js';
 
 type Payload = {
   videoId: string;
@@ -68,6 +72,16 @@ const consumer = Consumer.create({
         );
       }
     } catch (error) {
+      if (error instanceof YoutubeTranscriptDisabledError) {
+        console.warn(error.message);
+        return message;
+      }
+      if (error instanceof YoutubeTranscriptVideoStatusError) {
+        if (error.reason && error.reason.includes('Video unavailable')) {
+          console.warn(error.message);
+          return message;
+        }
+      }
       console.error(`Error processing message ${message.MessageId}:`, error);
     }
     return undefined;

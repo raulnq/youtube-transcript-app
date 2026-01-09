@@ -22,8 +22,10 @@ export class YoutubeTranscriptTooManyRequestError extends YoutubeTranscriptError
 }
 
 export class YoutubeTranscriptVideoStatusError extends YoutubeTranscriptError {
+  public reason?: string;
   constructor(videoId: string, status: string, reason?: string) {
     super(`The video ${videoId} response is ${status}. ${reason ?? ''}`);
+    this.reason = reason;
   }
 }
 
