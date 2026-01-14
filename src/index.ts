@@ -6,6 +6,10 @@ import {
   YoutubeTranscriptDisabledError,
   YoutubeTranscriptVideoStatusError,
 } from './youtube-transcript.js';
+import {
+  CreateScheduleCommand,
+  SchedulerClient,
+} from '@aws-sdk/client-scheduler';
 
 type Payload = {
   videoId: string;
@@ -33,6 +37,8 @@ console.log(`Endpoint: ${endpointUrl}`);
 
 const sqsClient = new SQSClient({ region: awsRegion });
 
+const schedulerClient = new SchedulerClient({ region: 'us-east-1' });
+
 const consumer = Consumer.create({
   queueUrl: sqsQueueUrl,
   sqs: sqsClient,
@@ -40,8 +46,8 @@ const consumer = Consumer.create({
   visibilityTimeout: 60,
   handleMessage: async message => {
     console.log(`Processing message: ${message.MessageId}`);
+    const payload = JSON.parse(message.Body!) as Payload;
     try {
-      const payload = JSON.parse(message.Body!) as Payload;
       const raw = await YoutubeTranscript.fetchTranscript(payload.videoId);
       const transcript = raw.map(item => item.text).join(' ');
       const controller = new AbortController();
@@ -79,6 +85,34 @@ const consumer = Consumer.create({
       if (error instanceof YoutubeTranscriptVideoStatusError) {
         if (error.reason && error.reason.includes('Video unavailable')) {
           console.warn(error.message);
+          return message;
+        }
+        if (error.status === 'LIVE_STREAM_OFFLINE') {
+          const schedulerRoleArn = process.env['SCHEDULER_ROLE_ARN']!;
+          const sqsQueueArn = process.env['SQS_ARN']!;
+          if (schedulerRoleArn && sqsQueueArn) {
+            const executeAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+            // Format: yyyy-MM-ddTHH:mm:ss
+            const scheduleTime = executeAt.toISOString().slice(0, 19);
+            console.warn(
+              `Reschedule message ${message.MessageId}(${payload.videoId}) for ${executeAt.toISOString()}`
+            );
+            await schedulerClient.send(
+              new CreateScheduleCommand({
+                Name: `one-time-${Date.now()}`,
+                ScheduleExpression: `at(${scheduleTime})`,
+                Target: {
+                  Arn: sqsQueueArn,
+                  RoleArn: schedulerRoleArn,
+                  Input: message.Body,
+                },
+                FlexibleTimeWindow: { Mode: 'OFF' },
+                ActionAfterCompletion: 'DELETE',
+              })
+            );
+          } else {
+            console.warn(error.message);
+          }
           return message;
         }
       }
