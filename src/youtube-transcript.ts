@@ -13,10 +13,10 @@ export class YoutubeTranscriptError extends Error {
   }
 }
 
-export class YoutubeTranscriptTooManyRequestError extends YoutubeTranscriptError {
-  constructor() {
+export class YoutubeTranscriptRateLimitError extends YoutubeTranscriptError {
+  constructor(videoId: string) {
     super(
-      'YouTube is receiving too many requests from this IP and now requires solving a captcha to continue'
+      `Rate limit exceeded (429) for video ${videoId}. YouTube is temporarily blocking requests.`
     );
   }
 }
@@ -183,6 +183,11 @@ export class YoutubeTranscript {
         'User-Agent': USER_AGENT,
       },
     });
+
+    if (transcriptResponse.status === 429) {
+      throw new YoutubeTranscriptRateLimitError(videoId);
+    }
+
     if (!transcriptResponse.ok) {
       throw new YoutubeTranscriptNotAvailableError(videoId);
     }
