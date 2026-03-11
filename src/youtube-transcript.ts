@@ -87,7 +87,7 @@ export class YoutubeTranscript {
   public static async fetchTranscript(
     videoId: string,
     config?: TranscriptConfig
-  ): Promise<TranscriptResponse[]> {
+  ): Promise<string> {
     const identifier = this.retrieveVideoId(videoId);
     const options = {
       method: 'POST',
@@ -193,14 +193,7 @@ export class YoutubeTranscript {
     }
     const transcriptBody = await transcriptResponse.text();
     const results = [...transcriptBody.matchAll(RE_XML_TRANSCRIPT)];
-    return results.map(result => ({
-      text: result[3],
-      duration: parseFloat(result[2]),
-      offset: parseFloat(result[1]),
-      lang:
-        config?.lang ??
-        playerCaptionsTracklistRenderer.captionTracks[0].languageCode,
-    }));
+    return results.map(result => result[3]).join(' ');
   }
 
   /**

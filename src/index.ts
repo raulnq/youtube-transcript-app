@@ -2,7 +2,6 @@ import 'dotenv/config';
 import { Consumer } from 'sqs-consumer';
 import { SQSClient } from '@aws-sdk/client-sqs';
 import {
-  YoutubeTranscript,
   YoutubeTranscriptDisabledError,
   YoutubeTranscriptVideoStatusError,
 } from './youtube-transcript.js';
@@ -10,6 +9,7 @@ import {
   CreateScheduleCommand,
   SchedulerClient,
 } from '@aws-sdk/client-scheduler';
+import { getTranscript } from './youtube-transcript-browser.js';
 
 type Payload = {
   videoId: string;
@@ -48,8 +48,8 @@ const consumer = Consumer.create({
     console.log(`Processing message: ${message.MessageId}`);
     const payload = JSON.parse(message.Body!) as Payload;
     try {
-      const raw = await YoutubeTranscript.fetchTranscript(payload.videoId);
-      const transcript = raw.map(item => item.text).join(' ');
+      console.log(`Processing video: ${payload.videoId}`);
+      const transcript = await getTranscript(payload.videoId);
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 60000);
       const response = await fetch(endpointUrl, {
